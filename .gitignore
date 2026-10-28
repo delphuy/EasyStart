@@ -1,0 +1,12 @@
+# 构建产物
+bin/
+obj/
+dist/
+publish/
+*.user
+*.suo
+.vs/
+
+# 运行痕迹
+diagnostics.log
+crash.log

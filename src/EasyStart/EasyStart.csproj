@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\es.ico</ApplicationIcon>
+    <AssemblyName>easy_start</AssemblyName>
+    <RootNamespace>EasyStart</RootNamespace>
+    <!-- 默认：框架依赖发布（轻 ~2MB exe）；设 -p:SelfContainedRelease=true 出便携自包含版 -->
+    <SelfContainedRelease>false</SelfContainedRelease>
+    <PublishSingleFile Condition="'$(SelfContainedRelease)'=='true'">true</PublishSingleFile>
+    <SelfContained Condition="'$(SelfContainedRelease)'=='true'">true</SelfContained>
+    <RuntimeIdentifier Condition="'$(SelfContainedRelease)'=='true'">win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(SelfContainedRelease)'=='true'">true</IncludeNativeLibrariesForSelfExtract>
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+    <PackageReference Include="ModernWpf" Version="1.4.6" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\es.ico" Condition="Exists('Assets\es.ico')" />
+  </ItemGroup>
+
+</Project>

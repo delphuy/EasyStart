@@ -1,0 +1,113 @@
+<Window x:Class="EasyStart.Panel.ItemEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="编辑快捷项"
+        Width="420" Height="400"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        KeyDown="OnWinKeyDown">
+    <!-- 与编辑/添加/设置窗同款：投影 + ✕/Esc（辉哥哥 2026-10-28：弹窗风格统一） -->
+    <Grid Margin="12">
+        <Border x:Name="DialogRoot" CornerRadius="12"
+                BorderThickness="1"
+                Background="{DynamicResource SystemControlBackgroundLightBrush}"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.35" />
+            </Border.Effect>
+            <Grid Margin="18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 标题（拖动把手） + ✕ -->
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" MouseLeftButtonDown="OnHeaderDrag" Cursor="SizeAll">
+                        <TextBlock Text="编辑快捷项" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                    </Border>
+                    <Button Grid.Column="1" Content="✕" Width="30" Height="28"
+                            FontSize="13" Padding="0" ToolTip="关闭（Esc）"
+                            Click="OnCloseRequest" />
+                </Grid>
+
+            <StackPanel Grid.Row="1">
+                <TextBlock Text="名称" FontSize="12" Opacity="0.7" Margin="0,0,0,4" />
+                <Border CornerRadius="6" BorderThickness="1"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        Margin="0,0,0,10">
+                    <TextBox x:Name="NameBox" Height="34" Padding="8"
+                             FontSize="13" BorderThickness="0"
+                             Background="Transparent" />
+                </Border>
+
+                <TextBlock Text="类型" FontSize="12" Opacity="0.7" Margin="0,0,0,4" />
+                <Border CornerRadius="6" BorderThickness="1"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        Margin="0,0,0,10">
+                    <ComboBox x:Name="TypeBox" Height="34" Padding="8,6"
+                              FontSize="13" BorderThickness="0"
+                              Background="Transparent"
+                              SelectionChanged="OnTypeChanged">
+                        <ComboBoxItem Content="程序 / .lnk / .bat" />
+                        <ComboBoxItem Content="网址" />
+                        <ComboBoxItem Content="文件夹" />
+                        <ComboBoxItem Content="系统操作" />
+                    </ComboBox>
+                </Border>
+
+                <TextBlock Text="目标路径 / 网址" FontSize="12" Opacity="0.7" Margin="0,0,0,4" />
+                <Border CornerRadius="6" BorderThickness="1"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        Margin="0,0,0,10">
+                    <TextBox x:Name="TargetBox" Height="34" Padding="8"
+                             FontSize="13" BorderThickness="0"
+                             Background="Transparent" />
+                </Border>
+
+                <TextBlock Text="参数" FontSize="12" Opacity="0.7" Margin="0,0,0,4" />
+                <Border CornerRadius="6" BorderThickness="1"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        Margin="0,0,0,10">
+                    <TextBox x:Name="ArgsBox" Height="34" Padding="8"
+                             FontSize="13" BorderThickness="0"
+                             Background="Transparent" />
+                </Border>
+
+                <TextBlock Text="面板数字键（可选，1-9 直接启动）" FontSize="12" Opacity="0.7" Margin="0,0,0,4" />
+                <Border CornerRadius="6" BorderThickness="1"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        Margin="0,0,0,10">
+                    <TextBox x:Name="ShortcutKeyBox" Height="34" Padding="8"
+                             FontSize="13" BorderThickness="0"
+                             Background="Transparent" />
+                </Border>
+
+                <CheckBox x:Name="PrivilegedBox" Content="以管理员身份启动"
+                          FontSize="13" Margin="0,0,0,10" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button x:Name="CancelButton" Content="取消"
+                        Width="80" Height="34" Margin="0,0,8,0"
+                        Click="OnCancel" />
+                <Button x:Name="SaveButton" Content="保存"
+                        Width="80" Height="34"
+                        Background="DodgerBlue" Foreground="White"
+                        Click="OnSave" />
+            </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
