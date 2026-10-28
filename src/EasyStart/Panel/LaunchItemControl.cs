@@ -196,11 +196,7 @@ public class LaunchItemControl : UserControl
         }
         Add("编辑", (_, _) => EditRequested?.Invoke(it));
         Add("定位文件", (_, _) => LaunchRunner.Reveal(it));
-        Add("启动目录", (_, _) =>
-        {
-            if (System.IO.Directory.Exists(it.WorkDir))
-                System.Diagnostics.Process.Start("explorer.exe", it.WorkDir);
-        });
+        // 2026-10-28（辉哥哥）：「启动目录」与「定位文件」重复，删启动目录
         menu.Items.Add(new Separator());
         Add("删除", (_, _) => DeleteItem(it));
 

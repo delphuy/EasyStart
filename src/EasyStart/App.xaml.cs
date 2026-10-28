@@ -77,8 +77,13 @@ public partial class App : Application
         Storage.ProfileStore.Portable = ctx.Profile.Settings.Portable;
 
         // 4. 主面板（启动时完整显示，失焦后才隐藏，P1-F3）
+        //    --minimized（开机自启写入的参数）：安静启动，只挂托盘不弹面板
+        //    （2026-10-28 修：开机启动项传了参数却没人理，开机就弹面板）
+        bool startMinimized = e.Args != null &&
+            e.Args.Any(a => string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase));
         _panel = new PanelWindow(ctx.SettingsService);
-        _panel.Show();
+        if (!startMinimized)
+            _panel.Show();
 
         // 5. 托盘
         _tray = new TrayIconService();
