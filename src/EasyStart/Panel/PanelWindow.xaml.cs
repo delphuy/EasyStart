@@ -272,6 +272,7 @@ public partial class PanelWindow : Window
         if (added > 0)
         {
             _settings.Save();
+            _dropReceived = true; // 告诉拖拽保护轮询：拖进来了，松键后保持显示（面板/页签标签三条落点共用户）
             // 刷新：如果拖到的是当前页签就重画，否则只重画标签条
             if (tabIndex == _currentTab) ShowItems();
             RenderTabs();
@@ -416,9 +417,58 @@ public partial class PanelWindow : Window
         if (s.PreventHideOnCtrlHold && ctrl)
             return; // 失焦那刻 Ctrl 按着 → 不隐藏（辉哥哥：按住 Ctrl 时不隐藏）
 
+        // 拖拽保护（2026-10-28 修回归）：从资源管理器起拖那一下面板就会失焦被藏掉，
+        // 拖到原地已空无一物。失焦那刻左键正按着 = 正在拖/选中 → 不立即隐藏，
+        // 交给 100ms 轮询：松键时再判，期间没把东西拖进来才补隐藏。
+        if (Shell.HookDiagnostics.LeftButtonNow())
+        {
+            DeferHideUntilMouseButtonUp();
+            return;
+        }
+
         SaveGeometryToDisk(); // 隐藏前落盘（辉哥哥：窗口位置/大小要记住上一次的）
         Shell.HookDiagnostics.Log("失焦→隐藏");
         Hide();
+    }
+
+    /// <summary>拖拽保护期标记：轮询中（防重入）</summary>
+    private bool _deferHidePolling;
+
+    /// <summary>拖拽保护期内是否收到了真正的拖放（Drop 置位）</summary>
+    private bool _dropReceived;
+
+    /// <summary>失焦但左键按着（正在拖/选中）→ 暂缓隐藏，松键时再判：
+    /// 期间有 Drop 进面板（_dropReceived）→ 保持显示；没有 → 走原逻辑补隐藏。</summary>
+    private void DeferHideUntilMouseButtonUp()
+    {
+        if (_deferHidePolling) return;
+        _deferHidePolling = true;
+        _dropReceived = false;
+        Shell.HookDiagnostics.Log("失焦但左键按着 → 拖拽保护，暂不隐藏");
+        System.Windows.Threading.DispatcherTimer? timer = null;
+        timer = new System.Windows.Threading.DispatcherTimer(
+            System.TimeSpan.FromMilliseconds(100),
+            System.Windows.Threading.DispatcherPriority.Background,
+            (_, _) =>
+            {
+                if (Shell.HookDiagnostics.LeftButtonNow()) return; // 左键还按着，继续等
+                _deferHidePolling = false;
+                timer!.Stop();
+                if (_dropReceived)
+                {
+                    // 东西拖进面板了：面板交给 Drop 流程（已添加+toast），保持显示
+                    Shell.HookDiagnostics.Log("松键且已拖入面板 → 保持显示");
+                    _dropReceived = false;
+                    return;
+                }
+                var s = _settings.Profile.Settings;
+                if (!s.HideOnSmartDetect) return;
+                SaveGeometryToDisk();
+                Shell.HookDiagnostics.Log("松键且未拖入 → 补隐藏");
+                Hide();
+            },
+            Dispatcher);
+        timer.Start();
     }
 
     // ===== P2 面板右键菜单（编辑快捷项 / 重新加载图标，辉哥哥 2026-10-28 规格）=====

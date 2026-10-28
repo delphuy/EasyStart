@@ -145,6 +145,8 @@ public partial class App : Application
 
     private System.Drawing.Icon? LoadIcon()
     {
+        // 三级加载（2026-10-28 修：安装版托盘无图标）
+        // ① 磁盘 es.ico（多尺寸原版，开发目录/手动放置时优先用）
         try
         {
             var p = System.IO.Path.Combine(System.AppContext.BaseDirectory, "es.ico");
@@ -152,17 +154,24 @@ public partial class App : Application
                 return new System.Drawing.Icon(p);
         }
         catch { }
-        // 缺省：纯色位图占位
+        // ② exe 内嵌图标（csproj ApplicationIcon 恒在：单文件/安装版/绿色版通吃，
+        //    打包后磁盘上没有 es.ico，这里是托盘图标的主通道）
+        try
+        {
+            var exePath = Environment.ProcessPath
+                ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+            if (!string.IsNullOrEmpty(exePath) && System.IO.File.Exists(exePath))
+                return System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+        }
+        catch { }
+        // ③ 纯色占位（兜底；注意 new Icon(流) 只认 .ico 格式，PNG 必抛——改走 GetHicon）
         try
         {
             var bmp = new System.Drawing.Bitmap(32, 32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             using var g = System.Drawing.Graphics.FromImage(bmp);
             g.Clear(System.Drawing.Color.FromArgb(0x0A, 0x6C, 0xF1));
             g.FillEllipse(System.Drawing.Brushes.White, 8, 8, 16, 16);
-            using var ms = new System.IO.MemoryStream();
-            bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-            ms.Position = 0;
-            return new System.Drawing.Icon(ms);
+            return System.Drawing.Icon.FromHandle(bmp.GetHicon());
         }
         catch { return null; }
     }

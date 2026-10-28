@@ -218,6 +218,9 @@ public class LaunchItemControl : UserControl
             if (idx >= 0)
             {
                 t.Items.RemoveAt(idx);
+                // 先落盘再刷新（2026-10-28 修回归）：RaiseRefresh 内部会从磁盘重载档案，
+                // 旧顺序（先刷新后保存）= 先重载把刚删的项复活、再把复活数据存回去，删除当场被抹掉。
+                EasyStart.AppContext.Instance?.SettingsService.Save();
                 if (OwnerWindow != null)
                 {
                     OwnerWindow.Dispatcher.Invoke(() =>
@@ -229,7 +232,6 @@ public class LaunchItemControl : UserControl
                 break;
             }
         }
-        EasyStart.AppContext.Instance?.SettingsService.Save();
     }
 
     // ===== 拖拽换位（P1-F7）：阈值判定区分点击/拖拽 =====

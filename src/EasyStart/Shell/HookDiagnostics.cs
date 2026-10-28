@@ -36,9 +36,13 @@ public static class HookDiagnostics
     private const int VK_LCONTROL = 0xA0;
     private const int VK_RCONTROL = 0xA1;
     private const int VK_CONTROL = 0x11;
+    private const int VK_LBUTTON = 0x01;
 
     /// <summary>此刻物理 Ctrl 是否按下（左/右/通用 三个键位任一）</summary>
     public static bool CtrlNow() => CtrlState().down;
+
+    /// <summary>此刻物理左键是否按下（失焦拖拽保护用：面板失焦后 WPF 的 Mouse 状态可能停更，必须走原生查询）</summary>
+    public static bool LeftButtonNow() => (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
     /// <summary>Ctrl 键状态 + 三个键位的原始值（落盘排障用）</summary>
     public static (bool down, string raw) CtrlState()
