@@ -171,14 +171,15 @@ public partial class PanelWindow : Window
         else if (t || b) Cursor = System.Windows.Input.Cursors.SizeNS;
     }
 
-    /// <summary>持久化窗口几何到盘（失焦隐藏/关闭/手动 resize/拖动 结束时调用）</summary>
+    /// <summary>持久化窗口几何到盘（失焦隐藏/关闭/手动 resize/拖动 结束时调用）。
+    /// 2026-10-29 改走 SaveSilent：几何落盘不再触发热键重注册+外观重应用整链。</summary>
     private void SaveGeometryToDisk()
     {
         _settings.Profile.Window.X = Left;
         _settings.Profile.Window.Y = Top;
         _settings.Profile.Window.Width = Width;
         _settings.Profile.Window.Height = Height;
-        _settings.Save();
+        _settings.SaveSilent();
     }
 
     /// <summary>创建 + 号按钮（P1-F1 无底色），作为页签条末尾的固定项</summary>
@@ -843,9 +844,18 @@ public partial class PanelWindow : Window
 
     private void LaunchFromUi(LaunchItem item)
     {
-        LaunchRunner.Launch(item,
-            success: msg => ToastService.Show(msg),
+        // 2026-10-29（辉哥哥）：主面板点图标启动——不弹成功 toast（每次点都提示太吵），
+        // 失败提示保留（面板此时还显示着，看得见）；启动成功 → 面板立即隐藏（Rolan 同款），
+        // 不再等目标程序抢焦点触发失焦——目标启动慢/不抢焦点时面板就一直挂着。
+        var ok = LaunchRunner.Launch(item,
+            success: null,
             fail: (name, err) => ToastService.Show($"{name}：{err}", isError: true));
+        if (ok)
+        {
+            SaveGeometryToDisk();
+            Shell.HookDiagnostics.Log("启动成功 → 隐藏面板");
+            Hide();
+        }
     }
 
     private void EditFromUi(LaunchItem item)
@@ -855,7 +865,9 @@ public partial class PanelWindow : Window
 
     private void OnClosed(object sender, EventArgs e)
     {
-        _settings.Save();
+        // 2026-10-29 改静默：真关闭（退出）时窗口已销毁，再走 Save() 的通知链会在
+        // 已关闭窗口上 EnsureHandle → 抛「关闭窗口后…」（diagnostics.log 里反复出现的就是它）
+        _settings.SaveSilent();
     }
 
     // ===== 面板拖动（P1-F8）=====
@@ -919,7 +931,11 @@ public partial class PanelWindow : Window
 
         var it = tabs[data.FromTab].Items[data.FromIndex];
         tabs[data.FromTab].Items.RemoveAt(data.FromIndex);
-        int insertAt = toIndex > data.FromIndex ? toIndex - 1 : toIndex;
+        // 2026-10-29 修（辉哥哥：往前拖换不了位置）：旧公式 toIndex>FromIndex 时插在 toIndex-1，
+        // 往前拖的项落在目标前一格（视觉上等于没换），只有往后拖正常。
+        // 现在统一：移除后插在 toIndex —— 往后拖占目标原格位（原有良好行为不变），
+        // 往前拖同样占目标原格位，前后方向行为一致。
+        int insertAt = Math.Min(toIndex, tabs[data.FromTab].Items.Count);
         tabs[data.FromTab].Items.Insert(insertAt, it);
         _settings.Save();
         ShowItems();

@@ -1,16 +1,15 @@
 using System.Runtime.InteropServices;
-using System.Windows;
 using System.Windows.Interop;
-using EasyStart.Models;
 
 namespace EasyStart.HotKey;
 
 /// <summary>
-/// 全局热键管理（RegisterHotKey 到某 WPF 窗口 + HwndSource.AddHook 接收 WM_HOTKEY）：
-/// - 热键注册到指定的宿主窗口（PanelWindow 的 hwnd），即使面板隐藏，
-///   RegisterHotKey 注册的是系统级热键（不依赖窗口前台），仍能触发。
-/// - WM_HOTKEY 通过 HwndSource 钩子路由到对应 handler。
-/// 冲突时 Register 返回 false。
+/// 全局热键管理（RegisterHotKey + HwndSource.AddHook 接收 WM_HOTKEY）。
+/// 2026-10-29 重构：不再挂在 PanelWindow 的 hwnd 上——面板窗口的显示/隐藏/关闭生命周期会牵连热键
+/// （窗口真关闭后 EnsureHandle 抛「关闭窗口后…」、每次重注册都要先 Dispose 再新建，失败即全军覆没）。
+/// 改为自建一个 0×0 隐藏 WS_POPUP 宿主窗口，进程存活期间常驻：RegisterHotKey 注册的是系统级热键，
+/// WM_HOTKEY 直接投递到本宿主，与面板任何状态彻底解耦（实测：隐藏窗口收 WM_HOTKEY 毫无问题）。
+/// 冲突时 Register 返回 false（写入 diagnostics.log 留证）。
 /// </summary>
 public sealed class GlobalHotKeyManager : IDisposable
 {
@@ -22,6 +21,7 @@ public sealed class GlobalHotKeyManager : IDisposable
 
     private const int WM_HOTKEY = 0x0312;
     private const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8;
+    private const int WS_POPUP = unchecked((int)0x80000000);
 
     private readonly HwndSource _source;
     private readonly IntPtr _hwnd;
@@ -30,15 +30,18 @@ public sealed class GlobalHotKeyManager : IDisposable
     private readonly Dictionary<string, int> _comboToId = new();
     private int _nextId = 1;
 
-    public GlobalHotKeyManager(Window hostWindow)
+    public GlobalHotKeyManager()
     {
-        var helper = new WindowInteropHelper(hostWindow);
-        _hwnd = helper.EnsureHandle();
-        _source = HwndSource.FromHwnd(_hwnd);
-        if (_source == null)
-            throw new InvalidOperationException("宿主窗口 HwndSource 为空，无法挂热键钩子");
+        // 专用隐藏宿主：WS_POPUP、0×0、不带 WS_VISIBLE → 永不显示、不进任务栏、不抢焦点
+        var p = new HwndSourceParameters("EasyStart_HotkeyHost", 0, 0)
+        {
+            WindowStyle = WS_POPUP,
+        };
+        _source = new HwndSource(p);
+        _hwnd = _source.Handle;
         _hook = OnHwndMessage;
         _source.AddHook(_hook);
+        Shell.HookDiagnostics.Log($"热键宿主窗口已创建 hwnd=0x{_hwnd:X}");
     }
 
     private IntPtr OnHwndMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -107,16 +110,21 @@ public sealed class GlobalHotKeyManager : IDisposable
         _ => 0,
     };
 
-    /// <summary>注册；成功返回 true，解析失败或热键被占用返回 false</summary>
+    /// <summary>注册；成功返回 true，解析失败或热键被占用返回 false（失败写 diagnostics.log 留证）</summary>
     public bool Register(string combo, Action handler)
     {
         var parsed = Parse(combo);
-        if (parsed is null) return false;
+        if (parsed is null)
+        {
+            Shell.HookDiagnostics.Log($"热键注册失败: {combo}（无法解析）");
+            return false;
+        }
         var (mod, vk) = parsed.Value;
         int id = _nextId++;
         if (!RegisterHotKey(_hwnd, id, mod, vk))
         {
             _nextId--;
+            Shell.HookDiagnostics.Log($"热键注册失败: {combo}（被其他程序占用）");
             return false;
         }
         _handlers[id] = handler;
@@ -148,5 +156,6 @@ public sealed class GlobalHotKeyManager : IDisposable
     {
         UnregisterAll();
         _source.RemoveHook(_hook);
+        _source.Dispose();
     }
 }
