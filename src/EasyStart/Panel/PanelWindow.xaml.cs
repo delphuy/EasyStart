@@ -402,6 +402,14 @@ public partial class PanelWindow : Window
         base.OnClosing(e);
     }
 
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        // 热键唤起时 App 层把 Topmost 临时置 true 抢前台（绕开「全屏/置顶窗口压着，Show 不上前台」）；
+        // 激活成功后立刻撤掉，面板平时不霸顶遮挡其他窗口（2026-11-09 问题1 修复链的一环）
+        if (Topmost) Topmost = false;
+    }
+
     private void OnDeactivated(object sender, EventArgs e)
     {
         // 编辑/添加弹窗打开中 → 面板必须保持可见（弹窗抢焦点必触发失焦，这里拦下）
@@ -526,11 +534,12 @@ public partial class PanelWindow : Window
         }
     }
 
-    /// <summary>重新加载图标：IconExtractor 无持久缓存，重渲染 = 图标全量重抓重绘
-    /// （其余页签切换显示时本来就会重抓，这里把当前页签立即刷掉）</summary>
+    /// <summary>重新加载图标：先清空 IconExtractor 内存缓存再全量重渲染，强制从系统重新抓图
+    /// （2026-11-09 起图标带内存缓存，不清缓存重渲染只会命中缓存，起不到「重新加载」的作用）</summary>
     private void ReloadIcons()
     {
-        Shell.HookDiagnostics.Log("重新加载图标: 开始重渲染");
+        Shell.HookDiagnostics.Log("重新加载图标: 清缓存 + 重渲染");
+        Launcher.IconExtractor.ClearCache();
         RenderTabs();
         ShowItems();
         Shell.HookDiagnostics.Log("重新加载图标: 完成");

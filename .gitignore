@@ -10,3 +10,6 @@ publish/
 # 运行痕迹
 diagnostics.log
 crash.log
+
+# 本机恢复痕迹（非项目文件）
+_acl-recovery/

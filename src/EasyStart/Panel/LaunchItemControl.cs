@@ -41,6 +41,8 @@ public class LaunchItemControl : UserControl
             Stretch = Stretch.Uniform,
             Margin = new Thickness(0, 2, 0, 4),
         };
+        // 2026-11-09：小源图交给 WPF 渲染时的放大质量（配合 IconExtractor「只缩不放」策略）
+        RenderOptions.SetBitmapScalingMode(ic, BitmapScalingMode.HighQuality);
         var lb = new TextBlock
         {
             FontSize = 11,
@@ -150,9 +152,16 @@ public class LaunchItemControl : UserControl
         set
         {
             base.DataContext = value;
-            if (value is LaunchItem it) ApplyItem(it);
+            // 2026-11-09：面板流程是「先挂 DataContext，再 SetOwner/SetIconSize」，此处不抢先提取
+            // （旧版在这里同步 Extract 一次 + SetIconSize 又一次，全量重建时把 UI 线程卡出顿挫）
+            if (value is LaunchItem it && OwnerWindow != null) ApplyItem(it);
         }
     }
+
+    // 异步图标回填的版本守卫：切页签/改图标尺寸时旧结果作废，防止串位
+    private int _applyVersion;
+    // 去重键：同一控件内（同 item+尺寸+主题+DPI）的重复 ApplyItem 直接跳过
+    private string? _appliedKey;
 
     private void ApplyItem(LaunchItem it)
     {
@@ -161,9 +170,55 @@ public class LaunchItemControl : UserControl
         _icon.Height = size;
         // 深色主题下 fallback 圆/emoji 底色用浅色调（辉哥哥：深色模式图标没适配）
         bool dark = _themePalette?.IsDark ?? false;
-        _icon.Source = IconExtractor.Extract(PickTarget(it), size, it.IconPath, dark);
         _label.Text = it.Name ?? DisplayName(it);
         _label.ToolTip = _label.Text; // 过长被省略号截断时，悬停看全名
+
+        string target = PickTarget(it);
+        double dpi = ResolveDpi();
+
+        // 去重：SetIconSize 和 ApplyTheme 都会走到这里，全量重建时每控件触发两次，
+        // 参数没变就不再重复提取（2026-11-09 切页签卡顿主因之一）
+        string key = $"{target}|{it.IconPath}|{size}|{dark}|{dpi:0.###}|{it.Name}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+
+        // 缓存命中 → 同步显示（再次访问页签瞬间出图）；
+        // 未命中 → 先清空占位，后台线程提取后回填（首次访问页签不再卡 UI 线程）
+        var cached = IconExtractor.GetCached(target, it.IconPath, size, dark, dpi);
+        if (cached != null)
+        {
+            _applyVersion++;
+            _icon.Source = cached;
+            return;
+        }
+
+        int version = ++_applyVersion;
+        _icon.Source = null; // 提取中的临时空白；外框尺寸已固定，不会跳动
+        Task.Run(() =>
+        {
+            var src = IconExtractor.Extract(target, size, it.IconPath, dark, dpi);
+            Dispatcher.BeginInvoke(() =>
+            {
+                // 版本守卫：切页签/改尺寸后过期结果直接丢弃；控件已被复用也丢弃
+                if (version != _applyVersion || !ReferenceEquals(DataContext, it)) return;
+                _icon.Source = src;
+            });
+        });
+    }
+
+    /// <summary>取当前监视器 DPI 缩放比（必须在 UI 线程调；后台线程只拿值去做物理像素提取）</summary>
+    private double ResolveDpi()
+    {
+        try
+        {
+            if (OwnerWindow != null)
+                return VisualTreeHelper.GetDpi(OwnerWindow).PixelsPerDip;
+            var src = PresentationSource.FromVisual(this);
+            if (src?.CompositionTarget != null)
+                return src.CompositionTarget.TransformToDevice.M11;
+        }
+        catch { }
+        return 1.0;
     }
 
     private static string DisplayName(LaunchItem it)

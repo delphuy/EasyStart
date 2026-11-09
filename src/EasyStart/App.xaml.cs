@@ -23,6 +23,11 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 2026-11-09（问题1 验证链）：开机场景诊断靠日志，启动参数+总耗时必须落盘
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        string argsText = e.Args is { Length: > 0 } ? string.Join(" ", e.Args) : "(无)";
+        Shell.HookDiagnostics.Log($"启动: args={argsText}");
+
         // 全局异常兜底：崩前写 crash.log（exe 同目录），便于双击闪退排查
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             LogCrash("UnhandledException", args.ExceptionObject as Exception);
@@ -82,6 +87,12 @@ public partial class App : Application
         };
         Storage.ProfileStore.Portable = ctx.Profile.Settings.Portable;
 
+        // 3.5 全局热键（Alt+Space 默认）——2026-11-09 提前到面板创建之前（问题1）：
+        //    开机自启（--minimized）场景热键是唯一入口：注册越早，被其他开机程序抢注的概率越低；
+        //    面板构建/托盘加载再慢也不影响热键可用性。失败会走 2 秒级自动重试（StartHotKeyRetry）。
+        try { SetupHotKey(ctx); }
+        catch (Exception ex) { Shell.HookDiagnostics.Log("启动时注册热键异常: " + ex.Message); }
+
         // 4. 主面板（启动时完整显示，失焦后才隐藏，P1-F3）
         //    --minimized（开机自启写入的参数）：安静启动，只挂托盘不弹面板
         //    （2026-10-28 修：开机启动项传了参数却没人理，开机就弹面板）
@@ -111,14 +122,14 @@ public partial class App : Application
             onExit: () => ExitApp());
         _tray.SetIcon(LoadIcon());
 
-        // 6. 全局热键（Alt+Space 默认）
-        SetupHotKey(ctx);
-
-        // 6.5 中键唤出钩子（ShowOnMiddleClick 开启时全局生效）；启动时静默（verbose:false，别弹 toast）
+        // 6. 中键唤出钩子（ShowOnMiddleClick 开启时全局生效）；启动时静默（verbose:false，别弹 toast）
+        //    （原第 6 步「全局热键」已提前到 3.5，与面板创建解耦）
         ApplyMiddleClickWake(ctx, verbose: false);
 
         // 7. 应用开机自启
         Shell.AutoStartService.Apply(ctx.Profile.Settings.AutoStart);
+
+        Shell.HookDiagnostics.Log($"启动完成: 总耗时 {sw.ElapsedMilliseconds}ms 热键OK={_toggleHotkeyOk}");
     }
 
     /// <summary>按 ShowOnMiddleClick 开关启停全局中键钩子。
@@ -198,6 +209,11 @@ public partial class App : Application
         else
         {
             Shell.HookDiagnostics.Log("面板切换: 隐藏→可见");
+            // 置顶抢前台（2026-11-09 问题1）：前台是全屏/置顶窗口（游戏、别的置顶面板、
+            // 刚开机的恢复画面）时，裸 Show+Activate 会「显示在底层但没拿到前台」=
+            // 用户看着像热键没反应。先 Topmost=true 抬到最顶保证 Activate 生效；
+            // 激活后 PanelWindow.OnActivated 立刻把 Topmost 撤回 false，不霸顶。
+            _panel.Topmost = true;
             _panel.Show();
             _panel.Activate();
         }
@@ -255,25 +271,32 @@ public partial class App : Application
         }
     }
 
-    /// <summary>呼出热键被占用 → 15 秒后自动重试 SetupHotKey，成功或 40 次（≈10 分钟）后停</summary>
+    /// <summary>呼出热键被占用 → 自动重试，先快后慢（2026-11-09 问题1）：
+    /// 开机瞬间被抢注的组合，通常几秒内就还回来 → 前 10 次每 2 秒一波；
+    /// 还没抢到说明对方常驻占着 → 降为每 15 秒慢捞。总上限 40 次，成功即停。</summary>
     private void StartHotKeyRetry(AppContext ctx)
     {
         if (_hotkeyRetry != null) return; // 已在重试周期内
         _hotkeyRetryCount = 0;
         _hotkeyRetry = new System.Windows.Threading.DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(15),
+            Interval = TimeSpan.FromSeconds(2),
         };
         _hotkeyRetry.Tick += (_, _) =>
         {
             if (_toggleHotkeyOk) { StopHotKeyRetry(); return; }
             if (++_hotkeyRetryCount > 40)
             {
-                Shell.HookDiagnostics.Log("呼出热键重试约 10 分钟仍未成功，停止重试（下次设置保存/重启应用会再试）");
+                Shell.HookDiagnostics.Log("呼出热键重试到上限仍未成功，停止（下次设置保存/重启应用会再试）");
                 StopHotKeyRetry();
                 return;
             }
             Shell.HookDiagnostics.Log($"呼出热键被占用，第 {_hotkeyRetryCount} 次自动重试…");
+            // 先快后慢：第 10 次之后把节奏放缓到 15 秒
+            if (_hotkeyRetry != null)
+                _hotkeyRetry.Interval = _hotkeyRetryCount < 10
+                    ? TimeSpan.FromSeconds(2)
+                    : TimeSpan.FromSeconds(15);
             SetupHotKey(ctx); // 成功时其内部会 StopHotKeyRetry
         };
         _hotkeyRetry.Start();

@@ -124,7 +124,10 @@ public sealed class GlobalHotKeyManager : IDisposable
         if (!RegisterHotKey(_hwnd, id, mod, vk))
         {
             _nextId--;
-            Shell.HookDiagnostics.Log($"热键注册失败: {combo}（被其他程序占用）");
+            // 2026-11-09（问题1 验证链）：带上 Win32 错误码——1409=已被占用（会自动重试），
+            // 其他错误码（如权限/参数问题）另有病因，日志里一眼分辨
+            int err = Marshal.GetLastWin32Error();
+            Shell.HookDiagnostics.Log($"热键注册失败: {combo}（Win32 错误 {err}，1409=被其他程序占用）");
             return false;
         }
         _handlers[id] = handler;

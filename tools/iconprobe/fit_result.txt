@@ -1,0 +1,11 @@
+物理目标: 60px  (48px 逻辑 x 125% DPI)
+项                    旧算法(框内内容)                  新算法(框内内容)             
+Notepad--            11px(41x47源)               59px(52x59)           
+IT_Help              ERR                        ERR                   
+OpenVPN              11px(47x47源)               59px(59x59)           
+DsInfo(自己人)          11px(47x47源)               59px(59x59)           
+万彩办公大师               11px(47x47源)               59px(59x59)           
+digiwin_vpn(Mars)    60px(255x255源)             59px(59x59)           
+昆山天气                 11px(46x44源)               58px(58x56)           
+QQ(对照)               60px(255x255源)             59px(59x59)           
+QQ音乐(对照)             59px(248x251源)             59px(58x59)           
