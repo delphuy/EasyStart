@@ -234,8 +234,14 @@ public class LaunchItemControl : UserControl
         // 系统项：把 action 作为"target"传给 IconExtractor，走系统符号渲染
         if (it.Type == LaunchItemType.System)
             return it.Action ?? "";
-        return it.Type == LaunchItemType.Uri ? it.Uri ?? "" : it.Target ?? "";
+        return GetExistingPath(it.Target) ?? GetExistingPath(it.ResolvedTarget) ?? it.Target ?? "";
     }
+
+    private static string? GetExistingPath(string? path)
+        => !string.IsNullOrWhiteSpace(path)
+           && (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
+            ? path
+            : null;
 
     private void ShowMenu()
     {

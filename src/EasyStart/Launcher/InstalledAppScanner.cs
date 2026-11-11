@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using EasyStart.Models;
 using Microsoft.Win32;
 
@@ -20,7 +19,7 @@ public static class InstalledAppScanner
         var dict = new Dictionary<string, LaunchItem>(StringComparer.OrdinalIgnoreCase);
 
         ScanRegistry(dict);   // 先注册表（显示名更正式）
-        ScanStartMenu(dict);  // 后开始菜单（补绿色软件），同目标自动去重
+        ScanStartMenu(dict);  // 后开始菜单（补绿色软件），同最终目标自动去重
 
         var list = dict.Values.ToList();
         list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
@@ -59,12 +58,14 @@ public static class InstalledAppScanner
                         var target = ResolveExecutable(displayIcon) ?? FindFirstExe(installLoc);
                         if (target == null) continue; // 无可启动目标（补丁/运行库）→ 不收
 
-                        Add(dict, new LaunchItem
+                        var item = new LaunchItem
                         {
                             Type = LaunchItemType.Shortcut,
                             Name = name,
                             Target = target,
-                        });
+                        };
+                        ShortcutResolver.Normalize(item);
+                        Add(dict, item);
                     }
                     catch { }
                 }
@@ -87,13 +88,14 @@ public static class InstalledAppScanner
             {
                 try
                 {
-                    // 解析 .lnk 真实目标；COM 解析失败退化用 .lnk 本身（shell 启动 .lnk 一样能跑）
-                    var target = ResolveShortcutTarget(lnk) ?? lnk;
-                    if (!File.Exists(target) && !Directory.Exists(target)) continue;
-
-                    var item = ItemFactory.FromDrop(target, null);
+                    // Target 保持开始菜单 .lnk（版本目录变化时仍稳定），
+                    // ResolvedTarget 保存最终真实 exe，用于图标/启动 fallback 和去重。
+                    var item = ItemFactory.FromDrop(lnk, null);
                     if (item == null) continue;
-                    item.Name = Path.GetFileNameWithoutExtension(lnk); // 显示名跟开始菜单一致
+                    item.Name = Path.GetFileNameWithoutExtension(lnk);
+
+                    var resolved = item.ResolvedTarget ?? item.Target;
+                    if (string.IsNullOrWhiteSpace(resolved) || !PathExists(resolved)) continue;
                     Add(dict, item);
                 }
                 catch { }
@@ -139,37 +141,53 @@ public static class InstalledAppScanner
             || n.StartsWith("Hotfix", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>WScript.Shell COM 后期绑定解析 .lnk 目标（不依赖动态绑定）</summary>
-    private static string? ResolveShortcutTarget(string lnkPath)
-    {
-        try
-        {
-            var wshType = Type.GetTypeFromProgID("WScript.Shell");
-            if (wshType == null) return null;
-            var wsh = Activator.CreateInstance(wshType);
-            if (wsh == null) return null;
-            var sc = wshType.InvokeMember("CreateShortcut",
-                BindingFlags.InvokeMethod, null, wsh, new object[] { lnkPath });
-            if (sc == null) return null;
-            var target = sc.GetType().InvokeMember("TargetPath",
-                BindingFlags.GetProperty, null, sc, null) as string;
-            return string.IsNullOrWhiteSpace(target) ? null : target;
-        }
-        catch { return null; }
-    }
-
-    /// <summary>合并去重：先到先得（注册表条目优先），Key = 归一化目标路径</summary>
+    /// <summary>
+    /// 按最终真实目标去重；同名目标同时存在注册表 exe 和开始菜单 .lnk 时，
+    /// 保留开始菜单稳定 .lnk，但沿用注册表条目的正式显示名。
+    /// </summary>
     private static void Add(Dictionary<string, LaunchItem> dict, LaunchItem item)
     {
-        var key = item.Type switch
+        var rawKey = item.Type switch
         {
             LaunchItemType.Uri => item.Uri,
-            _ => item.Target,
+            _ => item.ResolvedTarget ?? item.Target,
         };
-        if (string.IsNullOrWhiteSpace(key)) return;
-        key = key.Trim().Trim('"');
-        if (!dict.ContainsKey(key)) dict[key] = item;
+        if (string.IsNullOrWhiteSpace(rawKey)) return;
+
+        var key = NormalizeKey(rawKey);
+        if (key == null) return;
+
+        if (!dict.TryGetValue(key, out var existing))
+        {
+            dict[key] = item;
+            return;
+        }
+
+        var incomingIsShortcut = ShortcutResolver.IsShortcut(item.Target);
+        var existingIsShortcut = ShortcutResolver.IsShortcut(existing.Target);
+        if (incomingIsShortcut && !existingIsShortcut)
+        {
+            item.Name = existing.Name;
+            dict[key] = item;
+        }
     }
+
+    private static string? NormalizeKey(string path)
+    {
+        var trimmed = path.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(trimmed)) return null;
+        try
+        {
+            return Path.GetFullPath(trimmed);
+        }
+        catch
+        {
+            return trimmed;
+        }
+    }
+
+    private static bool PathExists(string? path)
+        => File.Exists(path) || Directory.Exists(path);
 
     /// <summary>耐错枚举（无权限子目录跳过）</summary>
     private static IEnumerable<string> SafeEnumFiles(string dir, string pattern)

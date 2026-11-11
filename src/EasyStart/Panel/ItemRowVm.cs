@@ -52,11 +52,11 @@ public class ItemRowVm : INotifyPropertyChanged
     /// <summary>从 LaunchItem 建行（图标按面板同款规则提取：网址占位/系统字形/文件真图标）</summary>
     public static ItemRowVm From(LaunchItem it, bool dark, int size = 24)
     {
-        var target = it.Type switch
+        string? target = it.Type switch
         {
             LaunchItemType.Uri => it.Uri,
             LaunchItemType.System => it.Action,
-            _ => it.Target,
+            _ => GetExistingPath(it.Target) ?? it.ResolvedTarget ?? it.Target,
         };
         return new ItemRowVm
         {
@@ -64,6 +64,12 @@ public class ItemRowVm : INotifyPropertyChanged
             Icon = Launcher.IconExtractor.Extract(target, size, it.IconPath, dark),
         };
     }
+
+    private static string? GetExistingPath(string? path)
+        => !string.IsNullOrWhiteSpace(path)
+           && (System.IO.File.Exists(path) || System.IO.Directory.Exists(path))
+            ? path
+            : null;
 
     private static string ActionLabel(string? key)
     {

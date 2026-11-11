@@ -39,12 +39,14 @@ public static class ItemFactory
         switch (ext)
         {
             case ".lnk":
-                return new LaunchItem
+                var shortcut = new LaunchItem
                 {
                     Type = LaunchItemType.Shortcut,
                     Name = System.IO.Path.GetFileNameWithoutExtension(path),
                     Target = path,
                 };
+                ShortcutResolver.Normalize(shortcut);
+                return shortcut;
             case ".url":
                 // 解析 .url 文件
                 try

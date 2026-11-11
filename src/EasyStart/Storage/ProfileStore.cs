@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using EasyStart.Launcher;
 using EasyStart.Models;
 using EasyStart.SystemOps;
 
@@ -75,6 +76,13 @@ public sealed class ProfileStore
         {
             prof.Id = id;
             prof.Name = LoadMeta(id).Name;
+            foreach (var tab in prof.Tabs)
+            {
+                foreach (var item in tab.Items)
+                {
+                    ShortcutResolver.Normalize(item);
+                }
+            }
         }
         return prof;
     }

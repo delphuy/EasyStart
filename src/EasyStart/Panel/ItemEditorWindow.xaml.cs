@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using EasyStart.Launcher;
 using EasyStart.Models;
 using EasyStart.Storage;
 
@@ -73,19 +74,32 @@ public partial class ItemEditorWindow : Window
                 _item.Type = LaunchItemType.Shortcut;
                 _item.Target = TargetBox.Text.Trim();
                 _item.Uri = null;
+                _item.ResolvedTarget = null;
+                _item.ResolvedArgs = null;
+                _item.ResolvedWorkDir = null;
+                ShortcutResolver.Normalize(_item);
                 break;
             case 1:
                 _item.Type = LaunchItemType.Uri;
                 _item.Uri = TargetBox.Text.Trim();
                 _item.Target = null;
+                _item.ResolvedTarget = null;
+                _item.ResolvedArgs = null;
+                _item.ResolvedWorkDir = null;
                 break;
             case 2:
                 _item.Type = LaunchItemType.Folder;
                 _item.Target = TargetBox.Text.Trim();
+                _item.ResolvedTarget = null;
+                _item.ResolvedArgs = null;
+                _item.ResolvedWorkDir = null;
                 break;
             case 3:
                 _item.Type = LaunchItemType.System;
                 _item.Action = TargetBox.Text.Trim();
+                _item.ResolvedTarget = null;
+                _item.ResolvedArgs = null;
+                _item.ResolvedWorkDir = null;
                 break;
         }
 

@@ -29,6 +29,15 @@ public class LaunchItem
     /// <summary>目标路径（exe/lnk/文件夹）</summary>
     public string? Target { get; set; }
 
+    /// <summary>.lnk 链路的最终真实目标；Target 是稳定 .lnk 时作为 fallback</summary>
+    public string? ResolvedTarget { get; set; }
+
+    /// <summary>最终 .lnk 自带启动参数；仅 Target 失效走 fallback 时使用</summary>
+    public string? ResolvedArgs { get; set; }
+
+    /// <summary>最终 .lnk 自带工作目录；仅 Target 失效走 fallback 时使用</summary>
+    public string? ResolvedWorkDir { get; set; }
+
     /// <summary>启动参数</summary>
     public string? Args { get; set; }
 
