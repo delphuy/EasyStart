@@ -66,6 +66,26 @@
                     </ComboBox>
                 </Border>
 
+                <TextBlock Text="图标" FontSize="12" Opacity="0.7" Margin="0,0,0,6"
+                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <Border CornerRadius="6" BorderThickness="1" Width="40" Height="40"
+                            VerticalAlignment="Center"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                        <Image x:Name="IconPreview" Width="30" Height="30"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Button Content="选择图标…" Width="96" Height="34"
+                            Margin="10,0,6,0" VerticalAlignment="Center"
+                            Click="OnPickIcon" />
+                    <Button Content="恢复默认" Width="80" Height="34"
+                            VerticalAlignment="Center"
+                            Click="OnResetIcon" />
+                </StackPanel>
+                <TextBlock Text="支持 png / jpg / jpeg / ico / bmp；保存后复制到本机稳定目录"
+                           FontSize="11" Opacity="0.55" Margin="0,0,0,12"
+                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
                 <TextBlock Text="目标路径 / 网址" FontSize="12" Opacity="0.7" Margin="0,0,0,4" />
                 <Border CornerRadius="6" BorderThickness="1"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"

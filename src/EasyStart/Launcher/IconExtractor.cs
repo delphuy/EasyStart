@@ -114,13 +114,25 @@ public static class IconExtractor
     private static System.Windows.Media.ImageSource ExtractCore(string? target, int phys,
         string? iconPathOverride, bool dark)
     {
-        // 自定义图标优先（.ico 直接读，png/jpg/bmp 走 Image 解码）
+        // 自定义图标优先：.ico 走多帧选帧；png/jpg/jpeg/bmp 走等比高清方形化
         if (!string.IsNullOrEmpty(iconPathOverride) && System.IO.File.Exists(iconPathOverride))
         {
-            try { return LoadIco(iconPathOverride, phys); }
+            var ext = System.IO.Path.GetExtension(iconPathOverride).ToLowerInvariant();
+            try
+            {
+                return ext == ".ico"
+                    ? LoadIco(iconPathOverride, phys)
+                    : LoadImageFile(iconPathOverride, phys);
+            }
             catch
             {
-                try { return LoadImageFile(iconPathOverride, phys); } catch { /* fallthrough */ }
+                try
+                {
+                    return ext == ".ico"
+                        ? LoadImageFile(iconPathOverride, phys)
+                        : LoadIco(iconPathOverride, phys);
+                }
+                catch { /* fallthrough */ }
             }
         }
 

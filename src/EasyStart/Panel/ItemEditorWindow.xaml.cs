@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using EasyStart.Launcher;
@@ -13,6 +14,8 @@ public partial class ItemEditorWindow : Window
     private SettingsService _settings = null!;
     private bool _saveAfterEdit;
     private bool _isNew;
+    private bool _dark;
+    private string? _customIconPath;
 
     public ItemEditorWindow()
     {
@@ -33,10 +36,12 @@ public partial class ItemEditorWindow : Window
         _settings = settings;
         _saveAfterEdit = saveAfterEdit;
         _isNew = isNew;
+        _dark = ThemePalette.Get(settings.Profile.Settings.Theme).IsDark;
+        _customIconPath = File.Exists(item.IconPath) ? item.IconPath : null;
         DialogTheme.Apply(this, settings.Profile.Settings.Theme);
 
         NameBox.Text = item.Name ?? "";
-        TargetBox.Text = item.Target ?? item.Uri ?? "";
+        TargetBox.Text = item.Target ?? item.Uri ?? item.Action ?? "";
         ArgsBox.Text = item.Args ?? "";
         ShortcutKeyBox.Text = item.ShortcutKey ?? "";
         PrivilegedBox.IsChecked = item.PreferPrivileged;
@@ -49,6 +54,57 @@ public partial class ItemEditorWindow : Window
             case LaunchItemType.System: TypeBox.SelectedIndex = 3; break;
         }
         ToggleFields();
+        RefreshIconPreview();
+    }
+
+    private void RefreshIconPreview()
+    {
+        var target = TargetBox.Text.Trim();
+        try
+        {
+            IconPreview.Source = IconExtractor.Extract(
+                string.IsNullOrWhiteSpace(target) ? null : target,
+                64,
+                _customIconPath,
+                _dark);
+        }
+        catch
+        {
+            IconPreview.Source = null;
+        }
+    }
+
+    private void OnPickIcon(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择图标",
+            Filter = "图标文件|*.ico;*.png;*.jpg;*.jpeg;*.bmp",
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        if (!IconAssetStore.IsSupported(dlg.FileName))
+        {
+            ToastService.Show("这个文件格式不支持，换 png / jpg / jpeg / ico / bmp 试试", isError: true);
+            return;
+        }
+
+        try
+        {
+            var preview = IconExtractor.Extract(null, 64, dlg.FileName, _dark);
+            _customIconPath = dlg.FileName;
+            IconPreview.Source = preview;
+        }
+        catch
+        {
+            ToastService.Show("这个文件当不了图标，换一个试试", isError: true);
+        }
+    }
+
+    private void OnResetIcon(object sender, RoutedEventArgs e)
+    {
+        _customIconPath = null;
+        RefreshIconPreview();
     }
 
     private void OnTypeChanged(object sender, SelectionChangedEventArgs e) => ToggleFields();
@@ -101,6 +157,23 @@ public partial class ItemEditorWindow : Window
                 _item.ResolvedArgs = null;
                 _item.ResolvedWorkDir = null;
                 break;
+        }
+
+        if (string.IsNullOrWhiteSpace(_customIconPath))
+        {
+            _item.IconPath = null;
+        }
+        else
+        {
+            try
+            {
+                _item.IconPath = IconAssetStore.Store(_customIconPath);
+            }
+            catch (Exception ex)
+            {
+                ToastService.Show("保存自定义图标失败：" + ex.Message, isError: true);
+                return;
+            }
         }
 
         if (_isNew)

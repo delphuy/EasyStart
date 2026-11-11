@@ -207,7 +207,12 @@ public partial class AddItemWindow : Window
 
         if (File.Exists(path) || Directory.Exists(path))
         {
-            CustomIcon.Source = IconExtractor.Extract(path, 32, null, _dark);
+            // 用户手选过图标后，改目标不能把预览和落盘状态悄悄换回默认图标
+            if (!_iconPickedByUser)
+            {
+                _customIconPath = null;
+                CustomIcon.Source = IconExtractor.Extract(path, 32, null, _dark);
+            }
             if (string.IsNullOrWhiteSpace(CustomName.Text))
             {
                 var probe = ItemFactory.FromDrop(path, null);
@@ -271,15 +276,27 @@ public partial class AddItemWindow : Window
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
             Title = "选择图标",
-            Filter = "图标文件|*.ico;*.png;*.jpg;*.bmp",
+            Filter = "图标文件|*.ico;*.png;*.jpg;*.jpeg;*.bmp",
         };
-        if (dlg.ShowDialog(this) == true)
+        if (dlg.ShowDialog(this) != true) return;
+
+        if (!IconAssetStore.IsSupported(dlg.FileName))
         {
+            ToastService.Show("这个文件格式不支持，换 png / jpg / jpeg / ico / bmp 试试", isError: true);
+            return;
+        }
+
+        try
+        {
+            var preview = IconExtractor.Extract(null, 32, dlg.FileName, _dark);
             _customIconPath = dlg.FileName;
             _iconPickedByUser = true;
             _faviconSeq++; // 让飞行中的 favicon 失效
-            try { CustomIcon.Source = IconExtractor.Extract(null, 32, _customIconPath, _dark); }
-            catch { ToastService.Show("这个文件当不了图标，换一个试试", isError: true); }
+            CustomIcon.Source = preview;
+        }
+        catch
+        {
+            ToastService.Show("这个文件当不了图标，换一个试试", isError: true);
         }
     }
 
@@ -288,6 +305,21 @@ public partial class AddItemWindow : Window
         _customIconPath = null;
         _iconPickedByUser = false;
         UpdateCustomPreview();
+    }
+
+    private string? StoreCustomIcon()
+    {
+        if (string.IsNullOrWhiteSpace(_customIconPath)) return null;
+
+        try
+        {
+            return IconAssetStore.Store(_customIconPath);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Show("保存自定义图标失败：" + ex.Message, isError: true);
+            return "";
+        }
     }
 
     /// <summary>自定义页签 → LaunchItem；没填或非法返回 null</summary>
@@ -306,12 +338,14 @@ public partial class AddItemWindow : Window
                 ToastService.Show("网址格式不对：" + path, isError: true);
                 return null;
             }
+            var iconPath = StoreCustomIcon();
+            if (iconPath == "") return null;
             return new LaunchItem
             {
                 Type = LaunchItemType.Uri,
                 Uri = u.ToString(),
                 Name = name.Length > 0 ? name : u.Host,
-                IconPath = _customIconPath, // favicon / 手选图标落盘，面板直接用
+                IconPath = iconPath, // favicon / 手选图标落盘，面板直接用
             };
         }
 
@@ -324,7 +358,9 @@ public partial class AddItemWindow : Window
         var item = ItemFactory.FromDrop(path, null);
         if (item == null) return null;
         if (name.Length > 0) item.Name = name;
-        item.IconPath = _customIconPath; // 手选图标同样落到程序/文件项
+        var storedIconPath = StoreCustomIcon();
+        if (storedIconPath == "") return null;
+        item.IconPath = storedIconPath; // 手选图标同样落到程序/文件项
         return item;
     }
 
