@@ -1,7 +1,10 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyStart.Models;
+using EasyStart.Shell;
 
 namespace EasyStart.Launcher;
 
@@ -77,6 +80,52 @@ public static class LaunchRunner
         {
             UseShellExecute = true,
         });
+    }
+
+    // ===== 2026-11-11（辉哥哥：点图标大概率卡一下、偶尔无响应）：启动链的异步化 =====
+    // 根因：Launch/Reveal 的整条链（File.Exists 目标检查 / WScript.Shell COM 解析 /
+    // ShellExecuteEx 进程创建——后者要等杀软扫描、SmartScreen、UWP broker、UAC 应答）
+    // 全部同步跑在 UI 线程上，消息泵被押住：短则顿挫，长则"(未响应)"，Hide 排在链尾
+    // 只能干等着。以下入口把工作扔到专用 STA 后台线程，UI 线程立刻返回。
+
+    /// <summary>启动的异步版：UI 线程 await 本方法即返回，真正启动在后台 STA 线程执行。
+    /// 结果语义与同步 Launch 完全一致（true=成功发起；失败已走 fail 回调）。
+    /// success/fail 回调在**后台线程**执行——ToastService 内部自带 Dispatcher.Invoke，天然跨线程安全。</summary>
+    public static Task<bool> LaunchAsync(LaunchItem item, Action<string>? success, Action<string, string>? fail)
+        => RunOnSta(() =>
+        {
+            var sw = Stopwatch.StartNew();
+            var ok = Launch(item, success, fail);
+            // 落盘耗时：事后打开 diagnostics.log 一眼验证"耗时还在、但已不卡 UI"
+            HookDiagnostics.Log($"启动[{item.Name ?? item.Target ?? "?"}] 后台耗时 {sw.ElapsedMilliseconds}ms 结果={(ok ? "成功" : "失败")}");
+            return ok;
+        });
+
+    /// <summary>右键「定位文件」的异步版（fire-and-forget）：explorer /select 同样会被
+    /// 慢速/网络路径卡住，不再占 UI 线程。</summary>
+    public static void RevealAsync(LaunchItem item)
+        => RunOnSta(() => { Reveal(item); return true; });
+
+    /// <summary>把工作丢到专用 STA 后台线程执行，TaskCompletionSource 回传结果。
+    /// 为什么 STA 而不是 Task.Run：UseShellExecute=true 的 ShellExecuteEx 与
+    /// WScript.Shell COM 都要求 STA；线程池线程是 MTA，不保险。
+    /// 异常一律吞掉返回 false（Launch 内部已 catch，这里兜线程级异常），绝不逃回 async void。</summary>
+    private static Task<bool> RunOnSta(Func<bool> work)
+    {
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var t = new Thread(() =>
+        {
+            try { tcs.TrySetResult(work()); }
+            catch (Exception ex)
+            {
+                HookDiagnostics.Log("启动线程异常: " + ex.Message);
+                tcs.TrySetResult(false);
+            }
+        })
+        { IsBackground = true, Name = "es-launch" };
+        t.SetApartmentState(ApartmentState.STA);
+        t.Start();
+        return tcs.Task;
     }
 
     /// <summary>

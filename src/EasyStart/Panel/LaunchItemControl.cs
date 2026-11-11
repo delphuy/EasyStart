@@ -256,7 +256,8 @@ public class LaunchItemControl : UserControl
             menu.Items.Add(mi);
         }
         Add("编辑", (_, _) => EditRequested?.Invoke(it));
-        Add("定位文件", (_, _) => LaunchRunner.Reveal(it));
+        // 2026-11-11：explorer /select 原来同步跑在 UI 线程，网络/慢速路径会把面板卡住
+        Add("定位文件", (_, _) => LaunchRunner.RevealAsync(it));
         // 2026-10-28（辉哥哥）：「启动目录」与「定位文件」重复，删启动目录
         menu.Items.Add(new Separator());
         Add("删除", (_, _) => DeleteItem(it));

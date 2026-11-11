@@ -851,19 +851,23 @@ public partial class PanelWindow : Window
         ShowItems();
     }
 
-    private void LaunchFromUi(LaunchItem item)
+    // 2026-11-11（辉哥哥：点图标大概率卡一下、偶尔无响应）：启动链（File.Exists /
+    // ShellExecuteEx 进程创建 / 杀软扫描）原来整条同步跑在 UI 线程上，消息泵被押住，
+    // 点完面板僵住、整链跑完才轮到 Hide。改 LaunchAsync 扔后台 STA 线程，点击即返回。
+    // 成功路径先 Hide 再落盘：落盘再慢也发生在窗口消失之后，用户无感。
+    private async void LaunchFromUi(LaunchItem item)
     {
         // 2026-10-29（辉哥哥）：主面板点图标启动——不弹成功 toast（每次点都提示太吵），
         // 失败提示保留（面板此时还显示着，看得见）；启动成功 → 面板立即隐藏（Rolan 同款），
         // 不再等目标程序抢焦点触发失焦——目标启动慢/不抢焦点时面板就一直挂着。
-        var ok = LaunchRunner.Launch(item,
+        var ok = await LaunchRunner.LaunchAsync(item,
             success: null,
             fail: (name, err) => ToastService.Show($"{name}：{err}", isError: true));
         if (ok)
         {
-            SaveGeometryToDisk();
-            Shell.HookDiagnostics.Log("启动成功 → 隐藏面板");
             Hide();
+            Shell.HookDiagnostics.Log("启动成功 → 隐藏面板");
+            SaveGeometryToDisk();
         }
     }
 

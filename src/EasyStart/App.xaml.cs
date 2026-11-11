@@ -262,8 +262,11 @@ public partial class App : Application
                 if (!string.IsNullOrEmpty(it.GlobalHotkey))
                 {
                     var cap = it;
+                    // 2026-11-11：WM_HOTKEY 回调也在 UI 线程，同步 Launch 会把面板卡住
+                    // （同点图标卡顿根因），改后台 STA 线程 fire-and-forget；
+                    // 失败 toast 走 ToastService 内部的 Dispatcher.Invoke 自动回 UI 线程。
                     _hotkey.Register(cap.GlobalHotkey, () =>
-                        Launcher.LaunchRunner.Launch(cap,
+                        _ = Launcher.LaunchRunner.LaunchAsync(cap,
                             success: null, // 2026-10-29（辉哥哥）：启动动作不弹成功提示；失败提示保留
                             fail: (n, err) => Panel.ToastService.Show($"{n}：{err}", true)));
                 }
