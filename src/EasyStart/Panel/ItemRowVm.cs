@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.Windows.Media;
 using EasyStart.Models;
@@ -35,12 +36,17 @@ public class ItemRowVm : INotifyPropertyChanged
 
     public string TypeText => Item.Type switch
     {
-        LaunchItemType.Shortcut => "程序",
+        LaunchItemType.Shortcut => IsStoreApp ? "商店" : "程序",
         LaunchItemType.Uri => "网址",
         LaunchItemType.Folder => "文件夹",
         LaunchItemType.System => "系统",
         _ => "",
     };
+
+    /// <summary>商店应用项：Target 为 shell:AppsFolder\{AUMID} 系统伪路径（2026-11-23）</summary>
+    private bool IsStoreApp
+        => Item.Target is not null
+           && Item.Target.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase);
 
     public string PathText => Item.Type switch
     {

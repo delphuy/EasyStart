@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -7,6 +8,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using EasyStart.Launcher;
 using EasyStart.Models;
@@ -33,6 +35,8 @@ public partial class AddItemWindow : Window
     private string? _customIconPath;  // favicon 落盘路径或用户手选图标
     private bool _iconPickedByUser;   // 用户选过图就不再让 favicon 抢
     private int _faviconSeq;         // 让过期的 favicon 回调失效
+    private ICollectionView? _appsView; // 已安装列表的搜索过滤 + 排序视图（2026-11-23）
+    private bool _sortDesc;              // 名称排序方向：默认升序，点钮切 Z→A
 
     public AddItemWindow(SettingsService settings, int tabIndex, bool dark)
     {
@@ -44,6 +48,11 @@ public partial class AddItemWindow : Window
 
         AppList.ItemsSource = _apps;
         SysList.ItemsSource = _sys;
+
+        // 搜索/排序走集合默认视图（2026-11-23 辉哥哥：列表要能搜、能排）；
+        // 默认顺序维持扫描器的名称升序，点排序钮才挂 SortDescriptions。
+        _appsView = CollectionViewSource.GetDefaultView(_apps);
+        _appsView.Filter = o => PassesAppFilter((ItemRowVm)o!);
 
         var tabs = settings.Profile.Tabs;
         TargetTabText.Text = _tabIndex >= 0 && _tabIndex < tabs.Count
@@ -120,9 +129,13 @@ public partial class AddItemWindow : Window
     private void UpdateStatus()
     {
         var checkedCount = _apps.Count(r => r.Checked) + _sys.Count(r => r.Checked);
-        StatusText.Text = checkedCount > 0
-            ? $"共 {_appTotal} 个程序 · 已勾选 {checkedCount} 项"
-            : $"共 {_appTotal} 个程序，勾选后点确定（图标在后台陆续加载）";
+        var query = AppSearch.Text.Trim();
+        var visible = _appsView == null ? _apps.Count : _appsView.OfType<ItemRowVm>().Count();
+        StatusText.Text = query.Length > 0
+            ? $"共 {_appTotal} 个程序 · 匹配 {visible} · 已勾选 {checkedCount} 项"
+            : checkedCount > 0
+                ? $"共 {_appTotal} 个程序 · 已勾选 {checkedCount} 项"
+                : $"共 {_appTotal} 个程序，勾选后点确定（图标在后台陆续加载）";
     }
 
     private void OnRowChecked(object? sender, PropertyChangedEventArgs e)
@@ -133,7 +146,8 @@ public partial class AddItemWindow : Window
             // 全选框联动（辉哥哥 2026-10-28：两页签都要全选/取消全选）。
             // 置同步护栏：行变化反推全选框时别再触发"设置所有行"，否则单向清空会误伤。
             _selectAllSyncing = true;
-            AppSelectAll.IsChecked = _apps.Count > 0 && _apps.All(r => r.Checked);
+            var visible = VisibleAppRows();
+            AppSelectAll.IsChecked = visible.Count > 0 && visible.All(r => r.Checked);
             SysSelectAll.IsChecked = _sys.Count > 0 && _sys.All(r => r.Checked);
             _selectAllSyncing = false;
         }
@@ -142,12 +156,55 @@ public partial class AddItemWindow : Window
     private bool _selectAllSyncing;
 
     // Checked/Unchecked 接线（不用 Click：UIA Toggle 不走 Click，实测实锤）
+    // 搜索过滤时只作用当前可见行（2026-11-23 辉哥哥定的口径）
     private void OnAppSelectAllChecked(object sender, RoutedEventArgs e)
     {
         if (_selectAllSyncing) return;
         var on = AppSelectAll.IsChecked == true;
-        foreach (var r in _apps) r.Checked = on;
+        foreach (var r in VisibleAppRows()) r.Checked = on;
     }
+
+    // ===== 搜索 + 排序（2026-11-23 辉哥哥：已安装列表没有排序、缺少搜索）=====
+
+    private void OnAppSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        AppSearchHint.Visibility = AppSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_appsView == null) return;
+        _appsView.Refresh();
+        UpdateStatus();
+        // 过滤变了，全选框状态跟着可见行重新对齐
+        _selectAllSyncing = true;
+        var visible = VisibleAppRows();
+        AppSelectAll.IsChecked = visible.Count > 0 && visible.All(r => r.Checked);
+        _selectAllSyncing = false;
+    }
+
+    private void OnAppSortToggle(object sender, RoutedEventArgs e)
+    {
+        _sortDesc = !_sortDesc;
+        AppSortToggle.Content = _sortDesc ? "Z→A" : "A→Z";
+        ApplyAppSort();
+    }
+
+    /// <summary>名称包含匹配，不区分大小写；搜索框空 = 全部通过（搜索框只对已安装页签生效）</summary>
+    private bool PassesAppFilter(ItemRowVm r)
+    {
+        var query = AppSearch.Text.Trim();
+        if (query.Length == 0) return true;
+        return r.NameText.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void ApplyAppSort()
+    {
+        if (_appsView == null) return;
+        var dir = _sortDesc ? ListSortDirection.Descending : ListSortDirection.Ascending;
+        _appsView.SortDescriptions.Clear();
+        _appsView.SortDescriptions.Add(new SortDescription(nameof(ItemRowVm.NameText), dir));
+    }
+
+    /// <summary>当前可见行快照（搜索过滤后），全选勾选、全选框联动都以它为准</summary>
+    private List<ItemRowVm> VisibleAppRows()
+        => _appsView?.OfType<ItemRowVm>().ToList() ?? _apps.ToList();
 
     private void OnSysSelectAllChecked(object sender, RoutedEventArgs e)
     {
@@ -375,6 +432,14 @@ public partial class AddItemWindow : Window
         var added = 0;
         foreach (var r in _apps.Where(r => r.Checked))
         {
+            // 商店项图标指向 WindowsApps 版本目录，应用一更新路径就失效；
+            // 添加时复制进稳定目录（favicon / 手选图标同款模式），复制失败保留原路径。
+            if (r.Item.IconPath is not null && r.Item.Target is not null
+                && r.Item.Target.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
+            {
+                try { r.Item.IconPath = IconAssetStore.Store(r.Item.IconPath); }
+                catch { }
+            }
             items.Add(r.Item);
             added++;
         }

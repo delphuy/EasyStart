@@ -10,7 +10,8 @@ namespace EasyStart.Launcher;
 /// <summary>
 /// 全盘程序扫描（P2 添加窗口·已安装的应用程序页签）：
 /// 注册表卸载列表 + 开始菜单快捷方式，合并去重（辉哥哥 2026-10-28 定的口径）。
-/// 只收有可启动目标的条目；更新补丁/驱动运行库等不可启动项自动排除；商店 UWP 本轮不收。
+/// 只收有可启动目标的条目；更新补丁/驱动运行库等不可启动项自动排除；
+/// 商店应用 2026-11-23 起收录（shell:AppsFolder 原生枚举，辉哥哥已确认）。
 /// </summary>
 public static class InstalledAppScanner
 {
@@ -20,6 +21,7 @@ public static class InstalledAppScanner
 
         ScanRegistry(dict);   // 先注册表（显示名更正式）
         ScanStartMenu(dict);  // 后开始菜单（补绿色软件），同最终目标自动去重
+        ScanStoreApps(dict);  // 最后商店应用（HKCU 卸载列表实测全是 win32，与商店无重叠）
 
         var list = dict.Values.ToList();
         list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
@@ -100,6 +102,25 @@ public static class InstalledAppScanner
                 }
                 catch { }
             }
+        }
+    }
+
+    // ===== 3. 商店应用（shell:AppsFolder，2026-11-23 辉哥哥：应用商店装的程序要进列表）=====
+    private static void ScanStoreApps(Dictionary<string, LaunchItem> dict)
+    {
+        foreach (var (name, aumid) in ShellAppsFolder.EnumStoreApps())
+        {
+            // AUMID 伪路径不是文件系统目标：不走 Add()（其去重键要过 Path.GetFullPath），
+            // 也不需要 ShortcutResolver.Normalize（对伪路径是无害 no-op）。
+            // 直接键值入表：同一 AUMID 只会有一条，商店来源自身无重复；
+            // 本机实测 HKCU 卸载列表零 MSIX，与上两路扫描不会撞车。
+            dict["store:" + aumid] = new LaunchItem
+            {
+                Type = LaunchItemType.Shortcut,   // 模型零改动（Rolan 兼容），伪路径当快捷方式收
+                Name = name,
+                Target = "shell:AppsFolder\\" + aumid,
+                IconPath = StoreAppIconLocator.Locate(aumid), // 定位不到 → null → 列表灰圈兜底
+            };
         }
     }
 

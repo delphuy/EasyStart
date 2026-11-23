@@ -43,6 +43,19 @@ public static class LaunchRunner
 
                 case LaunchItemType.Shortcut:
                 default:
+                    // 商店应用：Target 是 shell:AppsFolder\{AUMID} 系统伪路径（2026-11-23）。
+                    // 伪路径不是文件系统目标，GetExistingPath 必判失效 → 必须先于 .lnk 链路特判。
+                    // 走 StoreAppLauncher（AAM 主通道 + explorer 兜底，成败可回报）；
+                    // 商店应用无法用 explorer 提权，PreferPrivileged 对该项自然忽略。
+                    if (item.Target is not null
+                        && item.Target.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var aumid = item.Target["shell:AppsFolder\\".Length..];
+                        if (!StoreAppLauncher.Launch(aumid))
+                            return Fail("商店应用启动失败");
+                        break;
+                    }
+
                     var psi = CreateShortcutStartInfo(item);
                     if (psi == null) return Fail("目标不存在或缺少目标");
 

@@ -134,11 +134,33 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <Grid Grid.Row="0" Margin="0,0,0,8">
-                                <TextBlock x:Name="StatusText" VerticalAlignment="Center" FontSize="12" Opacity="0.7"
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" x:Name="StatusText" VerticalAlignment="Center" FontSize="12"
+                                           Opacity="0.7" TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
-                                <CheckBox x:Name="AppSelectAll" Content="全选" HorizontalAlignment="Right"
-                                          FontSize="12" Checked="OnAppSelectAllChecked" Unchecked="OnAppSelectAllChecked"
-                                          ToolTip="勾选/取消勾选全部程序" />
+                                <!-- 搜索 + 排序（辉哥哥 2026-11-23：已安装列表要能搜、能排） -->
+                                <Grid Grid.Column="1" Width="150" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <Border CornerRadius="6" BorderThickness="1"
+                                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                                        <TextBox x:Name="AppSearch" Height="30" Padding="8,0" FontSize="12"
+                                                 BorderThickness="0" Background="Transparent" VerticalContentAlignment="Center"
+                                                 TextChanged="OnAppSearchChanged" ToolTip="按名称搜索（不区分大小写）" />
+                                    </Border>
+                                    <TextBlock x:Name="AppSearchHint" Text="搜索应用名称" FontSize="12" Opacity="0.4"
+                                               IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                </Grid>
+                                <Button Grid.Column="2" x:Name="AppSortToggle" Content="A→Z" Width="52" Height="30"
+                                        Margin="0,0,8,0" FontSize="12" Padding="0" Click="OnAppSortToggle"
+                                        ToolTip="切换名称排序方向（A→Z / Z→A）" />
+                                <CheckBox Grid.Column="3" x:Name="AppSelectAll" Content="全选" FontSize="12"
+                                          VerticalAlignment="Center" Checked="OnAppSelectAllChecked" Unchecked="OnAppSelectAllChecked"
+                                          ToolTip="勾选/取消勾选当前可见（搜索过滤后）程序" />
                             </Grid>
                             <Border Grid.Row="1" CornerRadius="8" BorderThickness="1"
                                     BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
